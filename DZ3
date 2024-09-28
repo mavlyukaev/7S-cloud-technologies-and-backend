@@ -5,43 +5,29 @@ import "fmt"
 type Mutex struct {
 	Count  int
 	signal chan struct{}
-	done   chan struct{} // Канал для отслеживания завершения всех горутин
 }
 
 func (m *Mutex) Unlock() {
-	// "Разблокируем" мьютекс, отправив в канал сообщение
 	m.signal <- struct{}{}
 }
 
 func (m *Mutex) Wait() {
-	// Ожидаем, пока все горутины не завершатся
 	for i := 0; i < m.Count; i++ {
-		<-m.done // Получаем сигналы от каждой горутины
+		<-m.signal
 	}
 }
 
 func main() {
 	m := Mutex{
 		Count:  3,
-		signal: make(chan struct{}, 3), // Канал с буфером для 3 разрешений
-		done:   make(chan struct{}, 3), // Канал для отслеживания завершения горутин
+		signal: make(chan struct{}, 3),
 	}
 
-	// Инициализация канала с тремя "разрешениями"
-	for i := 0; i < m.Count; i++ {
-		m.signal <- struct{}{}
-	}
-
-	// Запуск 3 горутин
 	for i := 0; i < 3; i++ {
 		go func() {
-			defer m.Unlock() // Освобождаем "разрешение" по завершению работы горутины
-			m.Wait()          // Ждем, пока не получим "разрешение"
-			fmt.Println("Hello, 世界")
-			m.done <- struct{}{} // Сигнализируем о завершении работы горутины
+			defer m.Unlock()
+			fmt.Printf("Горутина %d: Привет, мир!\n", i)
 		}()
 	}
-
-	// Ожидаем завершения всех горутин
 	m.Wait()
 }
