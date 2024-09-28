@@ -20,25 +20,40 @@ func (s *Semaphore) Acquire() {
 
 func main() {
 	var wg sync.WaitGroup
-
 	semaphore := Semaphore{
 		PermitCount: 3,
 		signal:      make(chan struct{}, 3),
 	}
 
+	// Инициализация разрешений
 	for i := 0; i < 3; i++ {
 		semaphore.signal <- struct{}{}
 	}
 
+	// Канал для передачи порядка
+	orderCh := make(chan int, 3)
+
+	// Запуск горутин
 	for i := 0; i < 3; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			defer semaphore.Release()
 			semaphore.Acquire()
-			fmt.Printf("Горутина %d: Привет, мир!\n", i)
+
+			// Ожидание, чтобы вывод был по порядку
+			orderCh <- i
 		}(i)
 	}
 
-	wg.Wait()
+	// Ожидание завершения всех горутин
+	go func() {
+		wg.Wait()
+		close(orderCh)
+	}()
+
+	// Вывод по порядку
+	for i := range orderCh {
+		fmt.Printf("Горутина %d: Привет, мир!\n", i)
+	}
 }
