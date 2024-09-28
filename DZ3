@@ -1,59 +1,43 @@
 package main
 
-import (
-	"fmt"
-	"sync"
-)
+import "fmt"
 
-type Semaphore struct {
-	PermitCount int
-	signal      chan struct{}
+type Mutex struct {
+	Count int
+	signal chan struct{} // канал для синхронизации
 }
 
-func (s *Semaphore) Release() {
-	s.signal <- struct{}{}
+func (m *Mutex) Unlock() {
+	// "Разблокируем" мьютекс, отправив в канал сообщение
+	m.signal <- struct{}{}
 }
 
-func (s *Semaphore) Acquire() {
-	<-s.signal
+func (m *Mutex) Wait() {
+	// Ожидаем, пока будет отправлено сообщение в канал
+	<-m.signal
 }
 
 func main() {
-	var wg sync.WaitGroup
-	semaphore := Semaphore{
-		PermitCount: 3,
-		signal:      make(chan struct{}, 3),
+	m := Mutex{
+		Count: 3,
+		signal: make(chan struct{}, 3), // канал с буфером для 3 разрешений
 	}
 
-	// Инициализация разрешений
+	// Инициализация канала с тремя "разрешениями"
+	for i := 0; i < m.Count; i++ {
+		m.signal <- struct{}{}
+	}
+
+	// Запуск 3 горутин
 	for i := 0; i < 3; i++ {
-		semaphore.signal <- struct{}{}
+		go func() {
+			defer m.Unlock() // освобождаем "разрешение" по завершению работы горутины
+			m.Wait()          // ждем, пока не получим "разрешение"
+			fmt.Println("Hello, 世界")
+		}()
 	}
 
-	// Канал для передачи порядка
-	orderCh := make(chan int, 3)
-
-	// Запуск горутин
-	for i := 0; i < 3; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			defer semaphore.Release()
-			semaphore.Acquire()
-
-			// Ожидание, чтобы вывод был по порядку
-			orderCh <- i
-		}(i)
-	}
-
-	// Ожидание завершения всех горутин
-	go func() {
-		wg.Wait()
-		close(orderCh)
-	}()
-
-	// Вывод по порядку
-	for i := range orderCh {
-		fmt.Printf("Горутина %d: Привет, мир!\n", i)
-	}
+	// Ожидаем, пока все горутины завершат свою работу
+	// Никакого явного ожидания здесь нет, так как каждая горутина заблокируется на m.Wait() и завершится по порядку.
+	select {}
 }
